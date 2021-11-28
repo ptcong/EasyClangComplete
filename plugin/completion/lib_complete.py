@@ -20,6 +20,7 @@ from ..error_vis.popups import Popup
 
 from threading import RLock
 from os import path
+import re
 
 log = logging.getLogger("ECC")
 
@@ -178,6 +179,14 @@ class Completer(BaseCompleter):
         row_col = ZeroIndexedRowCol.from_1d_location(
             view, completion_request.get_trigger_position())
         file_row_col = OneIndexedRowCol.from_zero_indexed(row_col)
+
+        # try to complete file with logos syntax (most parts are objective-c, c)
+        if re.search(r"\.(x|xm|xi|xmi)", file_name) != None:
+            file_body = re.sub(r"%hook\s+([^\s]+)(\r?\n)(.*?)(\r?\n)%end", "@implementation \\1\\2\\3\\4@end", file_body, flags=re.S)
+            file_body = re.sub(r"%group\s+([^\s]+)(\r?\n)(.*?)%end", "//group \\1\\2\\3//end", file_body, flags=re.S)
+            file_body = re.sub(r"%hookf\s*\(\s*([^,]+),\s*([a-zA-Z0-9_]+)\s*,?", "\\1 \\2(", file_body, flags=re.S)
+            file_body = re.sub(r"%init\s*\((.*?)\)", "/*init \\1 */ while(0);", file_body, flags=re.S)
+            file_body = re.sub(r"%ctor", "static __attribute__((constructor)) void stuff()", file_body, flags=re.S)
 
         # unsaved files
         unsaved_files = [(file_name, file_body)]
