@@ -20,6 +20,7 @@ from ..error_vis.popups import Popup
 
 from threading import RLock
 from os import path
+
 import re
 
 log = logging.getLogger("ECC")
@@ -124,6 +125,8 @@ class Completer(BaseCompleter):
         file_name = view.file_name()
         file_body = view.substr(sublime.Region(0, view.size()))
 
+        # file_body = self.fix_logos_file(file_name, file_body)
+
         unsaved_files = [(file_name, file_body)]
 
         # flags are loaded by base completer already
@@ -159,6 +162,20 @@ class Completer(BaseCompleter):
             end = time.time()
             log.debug("compilation done in %s seconds", end - start)
 
+    def fix_logos_file(self, file_name, file_body):
+        # try to complete file with logos syntax (most parts are objective-c, c)
+        if re.search(r"\.(x|xm|xi|xmi)", file_name) != None:
+            file_body = re.sub(r"\r?\n%hook\s+([^\s]+)(\r?\n)(.*?)(\r?\n)%end", "\n@implementation \\1 (hook)\\2\\3\\4@end", file_body, flags=re.S)
+            file_body = re.sub(r"\r?\n%hookf\s*\(\s*([^,]+),\s*([a-zA-Z0-9_]+)\s*,?", "\n\\1 \\2(", file_body, flags=re.S)
+            file_body = re.sub(r"\r?\n%new", "\n// new", file_body, flags=re.S)
+            file_body = re.sub(r"\r?\n%init\s*\((.*?)\);?", "\n/*init \\1 */ while(0);", file_body, flags=re.S)
+            file_body = re.sub(r"%ctor", "static __attribute__((constructor)) void stuff()", file_body, flags=re.S)
+            file_body = re.sub(r"\r?\n%group\s+([^\s]+)(\r?\n)(.*?)\r?\n%end", "\n//group \\1\\2\\3\n//end", file_body, flags=re.S)
+            file_body = re.sub(r"%orig\s*\(", "(0?0:", file_body, flags=re.S)
+            file_body = re.sub(r"%orig", "NULL", file_body, flags=re.S)
+
+        return file_body
+
     def complete(self, completion_request):
         """Create a list of autocompletions. Called asynchronously.
 
@@ -180,13 +197,7 @@ class Completer(BaseCompleter):
             view, completion_request.get_trigger_position())
         file_row_col = OneIndexedRowCol.from_zero_indexed(row_col)
 
-        # try to complete file with logos syntax (most parts are objective-c, c)
-        if re.search(r"\.(x|xm|xi|xmi)", file_name) != None:
-            file_body = re.sub(r"%hook\s+([^\s]+)(\r?\n)(.*?)(\r?\n)%end", "@implementation \\1\\2\\3\\4@end", file_body, flags=re.S)
-            file_body = re.sub(r"%group\s+([^\s]+)(\r?\n)(.*?)%end", "//group \\1\\2\\3//end", file_body, flags=re.S)
-            file_body = re.sub(r"%hookf\s*\(\s*([^,]+),\s*([a-zA-Z0-9_]+)\s*,?", "\\1 \\2(", file_body, flags=re.S)
-            file_body = re.sub(r"%init\s*\((.*?)\)", "/*init \\1 */ while(0);", file_body, flags=re.S)
-            file_body = re.sub(r"%ctor", "static __attribute__((constructor)) void stuff()", file_body, flags=re.S)
+        file_body = self.fix_logos_file(file_name, file_body)
 
         # unsaved files
         unsaved_files = [(file_name, file_body)]
@@ -347,6 +358,9 @@ class Completer(BaseCompleter):
             # Prepare unsaved files.
             file_name = view.file_name()
             file_body = view.substr(sublime.Region(0, view.size()))
+
+            # file_body = self.fix_logos_file(file_name, file_body)
+
             unsaved_files = [(file_name, file_body)]
 
             start = time.time()
